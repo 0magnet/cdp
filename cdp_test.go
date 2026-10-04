@@ -90,6 +90,11 @@ func fakeBrowser(t *testing.T) Browser {
 			case "Runtime.evaluate":
 				var p struct{ Expression string }
 				_ = json.Unmarshal(m.Params, &p) //nolint:errcheck
+				if strings.HasPrefix(p.Expression, "(()=>{const e=document.querySelector(") {
+					// Focus: everything exists except #missing.
+					write(map[string]any{"id": m.ID, "result": map[string]any{"result": map[string]any{"type": "boolean", "value": !strings.Contains(p.Expression, "#missing")}}})
+					continue
+				}
 				if p.Expression == "throw" {
 					write(map[string]any{"id": m.ID, "result": map[string]any{
 						"result":           map[string]any{"type": "object"},
@@ -99,6 +104,10 @@ func fakeBrowser(t *testing.T) Browser {
 				}
 				write(map[string]any{"id": m.ID, "result": map[string]any{"result": map[string]any{"type": "number", "value": len(p.Expression)}}})
 			default:
+				if strings.HasPrefix(m.Method, "Input.") {
+					// Echoed as an event, so a test can see what input was sent.
+					write(map[string]any{"method": m.Method, "params": m.Params})
+				}
 				write(map[string]any{"id": m.ID, "result": map[string]any{}})
 			}
 		}
@@ -270,5 +279,46 @@ func TestCloseEndsEverything(t *testing.T) {
 	}
 	if !errors.Is(c.Err(), ErrClosed) {
 		t.Fatalf("Err = %v", c.Err())
+	}
+}
+
+func TestFocusTypePress(t *testing.T) {
+	c := dialFake(t)
+	ctx := context.Background()
+	if err := c.Focus(ctx, `input[name="q"]`); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.Focus(ctx, "#missing"); err == nil {
+		t.Fatal("Focus of a missing element should fail")
+	}
+	evs, cancel := c.Events(8)
+	defer cancel()
+	if err := c.Type(ctx, "a=b"); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.Press(ctx, "Enter"); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.Press(ctx, "F13"); err == nil {
+		t.Fatal("an unknown key should fail")
+	}
+	var got []string
+	for len(got) < 3 {
+		select {
+		case e := <-evs:
+			got = append(got, e.Method+" "+string(e.Params))
+		case <-time.After(time.Second):
+			t.Fatalf("only saw %q", got)
+		}
+	}
+	want := []string{
+		`Input.insertText {"text":"a=b"}`,
+		`Input.dispatchKeyEvent {"code":"Enter","key":"Enter","text":"\r","type":"keyDown","windowsVirtualKeyCode":13}`,
+		`Input.dispatchKeyEvent {"code":"Enter","key":"Enter","type":"keyUp","windowsVirtualKeyCode":13}`,
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("event %d = %s, want %s", i, got[i], want[i])
+		}
 	}
 }

@@ -54,7 +54,8 @@ func TestLive(t *testing.T) {
 	}
 
 	page := "data:text/html," + url.PathEscape(`<body style="margin:0;background:#000">`+
-		`<div id=b style="width:200px;height:100px;background:#fff" onclick="window.hits=(window.hits||0)+1"></div>`)
+		`<div id=b style="width:200px;height:100px;background:#fff" onclick="window.hits=(window.hits||0)+1"></div>`+
+		`<input id=q style="background:#000;color:#000;border:0" onkeyup="window.ups=(window.ups||0)+1">`)
 	loaded, stop := c.Events(64)
 	if err := c.Navigate(ctx, page); err != nil {
 		t.Fatal(err)
@@ -90,6 +91,19 @@ func TestLive(t *testing.T) {
 	c.Click(300, 300) // off the box
 	if got := c.Eval(`window.hits`); got != float64(2) {
 		t.Fatalf("hits after two clicks on the box = %v", got)
+	}
+
+	if err := c.Focus(ctx, "#q"); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.Type(ctx, "a=b é"); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.Press(ctx, "Enter"); err != nil {
+		t.Fatal(err)
+	}
+	if got := c.Eval(`document.getElementById("q").value + " " + window.ups`); got != "a=b é 1" {
+		t.Fatalf(`typed field and keyups = %q, want "a=b é 1"`, got)
 	}
 
 	png1, err := c.ScreenshotPNG(ctx)
