@@ -105,6 +105,16 @@ func TestLive(t *testing.T) {
 	if got := c.Eval(`document.getElementById("q").value + " " + window.ups`); got != "a=b é 1" {
 		t.Fatalf(`typed field and keyups = %q, want "a=b é 1"`, got)
 	}
+	// Keys: a key event for each character, which is what a terminal reads.
+	if _, err := c.Evaluate(ctx, `window.downs = ""; addEventListener("keydown", e => window.downs += e.key + ",")`); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.Keys(ctx, "/6l{ArrowLeft}x{Enter}"); err != nil {
+		t.Fatal(err)
+	}
+	if got := c.Eval(`window.downs`); got != "/,6,l,ArrowLeft,x,Enter," {
+		t.Fatalf("keydowns = %q", got)
+	}
 
 	png1, err := c.ScreenshotPNG(ctx)
 	if err != nil {
