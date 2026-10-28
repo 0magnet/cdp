@@ -70,15 +70,19 @@ func fakeBrowser(t *testing.T) Browser {
 				return
 			}
 			var m struct {
-				ID     int64           `json:"id"`
-				Method string          `json:"method"`
-				Params json.RawMessage `json:"params"`
+				ID        int64           `json:"id"`
+				Method    string          `json:"method"`
+				Params    json.RawMessage `json:"params"`
+				SessionID string          `json:"sessionId"`
 			}
 			_ = json.Unmarshal(data, &m) //nolint:errcheck
 			switch m.Method {
 			case "Echo":
 				write(map[string]any{"method": "Test.event", "params": m.Params})
 				write(map[string]any{"id": m.ID, "result": m.Params})
+			case "Session":
+				// Answered as a browser answers a session's command: in that session.
+				write(map[string]any{"id": m.ID, "sessionId": m.SessionID, "result": map[string]any{"session": m.SessionID}})
 			case "Hang":
 			case "Bad":
 				write(map[string]any{"id": m.ID, "error": map[string]any{"code": -32601, "message": "'Bad' wasn't found"}})
@@ -320,5 +324,18 @@ func TestFocusTypePress(t *testing.T) {
 		if got[i] != want[i] {
 			t.Errorf("event %d = %s, want %s", i, got[i], want[i])
 		}
+	}
+}
+
+func TestDoSessionSendsTheSession(t *testing.T) {
+	c := dialFake(t)
+	ctx := context.Background()
+	var r struct{ Session string }
+	if err := c.DoSession(ctx, "S1", "Session", nil, &r); err != nil || r.Session != "S1" {
+		t.Fatalf("DoSession: %+v, %v; want the command sent in session S1", r, err)
+	}
+	r.Session = "unset"
+	if err := c.Do(ctx, "Session", nil, &r); err != nil || r.Session != "" {
+		t.Fatalf("Do: %+v, %v; want no session", r, err)
 	}
 }
