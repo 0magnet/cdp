@@ -22,6 +22,7 @@ jobs:
       # A compile gate for the js/wasm-tagged half. A wasm-only compile error is
       # invisible to a host build, and in these repos that is most of the code.
       - run: make test-wasm
+      - run: make check-names check-inits
 
   lint:
     runs-on: ubuntu-latest
